@@ -1,1 +1,1 @@
-worker: cd sessions && rm -rf * && node .
+web: node index.js
