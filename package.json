@@ -1,15 +1,14 @@
 {
-  "name": "dulhan-pair-code",
+  "name": "dulhan-qr-gen",
   "version": "1.0.0",
-  "description": "A simple and reliable pairing code and session ID generator for DULHAN-MD.",
+  "description": "A simple and reliable QR code session ID generator.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "arkhan998",
-  "license": "ISC",
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.2",
-    "pino": "^8.1.0"
+    "pino": "^8.1.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
