@@ -1,52 +1,47 @@
 /**
- * DULHAN-MD Pairing Code & Session ID Generator
- * This script reliably generates a valid Base64 Session ID.
+ * DULHAN-MD - Simple QR Code Session Generator
+ * This script uses the most reliable method (QR code) to generate a session.
  */
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const readline = require('readline');
+const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function generateSession() {
     console.log("========================================");
-    console.log("   👰‍♀️ DULHAN-MD SESSION GENERATOR 👰‍♀️   ");
+    console.log("   👰‍♀️ DULHAN-MD QR SESSION GENERATOR 👰‍♀️  ");
     console.log("========================================");
 
-    // temp_auth_state folder banayein taake session files save hon
     const { state, saveCreds } = await useMultiFileAuthState('temp_auth_state');
     
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false // Hum pairing code istemal kar rahe hain
+        printQRInTerminal: false // Hum isko khud handle karenge
     });
 
-    // Connection ki logic
     sock.ev.on('connection.update', async (update) => {
-        const { connection } = update;
+        const { connection, qr } = update;
+
+        if (qr) {
+            console.log("\nQR Code Generated. Please scan it with your WhatsApp.");
+            qrcode.generate(qr, { small: true });
+        }
 
         if (connection === 'open') {
             console.log('\n✅ Connection successful!');
-            console.log('Generating your Session ID...');
-
-            await sock.sendMessage(sock.user.id, { text: 'Session ID generate ho rahi hai, ek minute...' });
+            await sock.sendMessage(sock.user.id, { text: 'Session ID generate ho rahi hai...' });
             
-            // Asal Session ID (Base64 format mein)
             const creds = JSON.stringify(state.creds, null, 2);
             const sessionId = Buffer.from(creds).toString('base64');
             
-            const sessionMessage = `*DULHAN-MD SESSION ID:*\n\n\`\`\`${sessionId}\`\`\`\n\n*Warning:* Is ID ko kisi ke saath share na karein! Isko apni config.js file mein paste kar lein.`;
-
+            const sessionMessage = `*DULHAN-MD SESSION ID:*\n\n\`\`\`${sessionId}\`\`\`\n\n*Warning:* Is ID ko kisi ke saath share na karein!`;
             await sock.sendMessage(sock.user.id, { text: sessionMessage });
             
-            console.log('\n✅ Session ID aapke WhatsApp number par bhej di gayi hai!');
-            console.log('Aap ab is window ko band kar sakte hain.');
+            console.log('\n✅ Session ID has been sent to your WhatsApp!');
+            console.log('You can now close this generator.');
             
-            // Safai (Cleanup)
             if (fs.existsSync('./temp_auth_state')) {
                 fs.rmSync('./temp_auth_state', { recursive: true, force: true });
             }
@@ -54,23 +49,13 @@ async function generateSession() {
         }
 
         if (connection === 'close') {
-            console.log('\n❌ Connection closed. Please try again.');
-            process.exit(1);
+            console.log('\n❌ Connection Closed. Restarting...');
+            generateSession();
         }
     });
 
-    // Pairing code ki logic
-    if (!sock.authState.creds.registered) {
-        const phoneNumber = await question('Please enter your WhatsApp number with country code (e.g., 92...): ');
-        try {
-            const code = await sock.requestPairingCode(phoneNumber);
-            console.log(`\nYour Pairing Code is: ${code}`);
-            console.log("Is code ko apne phone mein WhatsApp > Linked Devices > Link with phone number mein daalein.");
-        } catch (e) {
-            console.error("Pairing code generate karne mein masla aa gaya. Number theek hai?", e);
-            process.exit(1);
-        }
-    }
+    // Save creds whenever they are updated
+    sock.ev.on('creds.update', saveCreds);
 }
 
-generateSession().catch(e => console.error("Ek unexpected error aa gaya:", e));
+generateSession().catch(e => console.error("An error occurred:", e));
