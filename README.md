@@ -1,2 +1,2 @@
-# Xeon-PairCode
-Pair code generator for whatsapp bots
+# DULHAN-MD-PairCode
+Pair code generator for dulhan-md whatsapp bots
