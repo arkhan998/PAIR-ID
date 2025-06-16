@@ -1,16 +1,19 @@
 /**
- * DULHAN-MD - Simple QR Code Session Generator
- * This script uses the most reliable method (QR code) to generate a session.
+ * DULHAN-MD - Direct Pairing Code & Session ID Generator
+ * This script generates a pairing code directly in the terminal.
  */
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcode = require('qrcode-terminal');
+const readline = require('readline');
 const fs = require('fs');
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function generateSession() {
     console.log("========================================");
-    console.log("   👰‍♀️ DULHAN-MD QR SESSION GENERATOR 👰‍♀️  ");
+    console.log("   👰‍♀️ DULHAN-MD SESSION GENERATOR 👰‍♀️   ");
     console.log("========================================");
 
     const { state, saveCreds } = await useMultiFileAuthState('temp_auth_state');
@@ -18,25 +21,19 @@ async function generateSession() {
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false // Hum isko khud handle karenge
+        printQRInTerminal: false
     });
 
     sock.ev.on('connection.update', async (update) => {
-        const { connection, qr } = update;
-
-        if (qr) {
-            console.log("\nQR Code Generated. Please scan it with your WhatsApp.");
-            qrcode.generate(qr, { small: true });
-        }
+        const { connection, lastDisconnect } = update;
 
         if (connection === 'open') {
-            console.log('\n✅ Connection successful!');
-            await sock.sendMessage(sock.user.id, { text: 'Session ID generate ho rahi hai...' });
+            console.log('\n✅ Connection Successful! Generating and sending Session ID...');
             
             const creds = JSON.stringify(state.creds, null, 2);
             const sessionId = Buffer.from(creds).toString('base64');
+            const sessionMessage = `*DULHAN-MD SESSION ID:*\n\n\`\`\`${sessionId}\`\`\`\n\n*Warning:* Is ID ko kisi ke saath share na karein! Isko apni config.js file mein paste kar lein.`;
             
-            const sessionMessage = `*DULHAN-MD SESSION ID:*\n\n\`\`\`${sessionId}\`\`\`\n\n*Warning:* Is ID ko kisi ke saath share na karein!`;
             await sock.sendMessage(sock.user.id, { text: sessionMessage });
             
             console.log('\n✅ Session ID has been sent to your WhatsApp!');
@@ -49,12 +46,26 @@ async function generateSession() {
         }
 
         if (connection === 'close') {
-            console.log('\n❌ Connection Closed. Restarting...');
-            generateSession();
+            const reason = DisconnectReason[lastDisconnect.error?.output?.statusCode] || 'Unknown';
+            console.error(`\n❌ Connection Closed. Reason: ${reason}. Please try again.`);
+            process.exit(1);
         }
     });
 
-    // Save creds whenever they are updated
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = await question('Please enter your WhatsApp number with country code (e.g., 92...): ');
+        try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            console.log("\n========================================");
+            console.log(`   YOUR PAIRING CODE: ${code}`);
+            console.log("========================================");
+            console.log("\nPlease enter this code in your phone quickly.");
+        } catch (e) {
+            console.error("Failed to request pairing code. Please make sure the phone number is correct.", e);
+            process.exit(1);
+        }
+    }
+
     sock.ev.on('creds.update', saveCreds);
 }
 
